@@ -19,11 +19,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Code).IsUnique();
         });
         
-        // GasStation configuration (optional indexes)
+        // GasStation configuration (using PostGIS indexing)
         modelBuilder.Entity<GasStation>(entity =>
         {
             entity.HasIndex(e => e.ExternalId);
-            // For spatial queries, rely on raw SQL/PostGIS
+            
+            entity.Property(e => e.Location)
+                .HasComputedColumnSql(
+                    "ST_SetSRID(ST_MakePoint(\"Longitude\", \"Latitude\"), 4326)",
+                    stored: true)
+                .HasColumnType("geography");   // Use geography for spherical calculations
+            
+            // spatial index on Location column
+            entity.HasIndex(e => e.Location)
+                .HasMethod("GIST");
         });
         
         // Price configuration
