@@ -54,10 +54,21 @@ builder.Services.AddHttpClient<CircleKFuelPriceProvider>(client =>
     client.DefaultRequestHeaders.Add("Accept", "application/json");
     client.DefaultRequestHeaders.Add("X-App-Name", "PRICES"); // Required header
 })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler // 
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     { 
-        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate //
+        // The Circle K API returns compressed responses (gzip/deflate).
+        // Without automatic decompression, the response content would appear as binary
+        // and cause JSON deserialization errors. This setting tells HttpClientHandler
+        // to automatically decompress gzip and deflate encoded responses.
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
     });
+
+// Q8/F24 API client
+builder.Services.AddHttpClient<Q8FuelPriceProvider>(client =>
+{
+    client.BaseAddress = new Uri("https://beta.q8.dk/");
+    // No special headers required for this endpoint
+});
 
 // Background scraper service
 builder.Services.AddHostedService<PriceScraperService>();
