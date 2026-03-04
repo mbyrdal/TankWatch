@@ -25,46 +25,53 @@ public class PriceRepository : IPriceRepository
             .ToListAsync();
         return latestPrices;
     }
-    
+
+    /// <summary>
+    /// Retrieves the latest fuel prices for gas stations within a specified radius of a location.
+    /// Uses PostGIS spatial indexing to quickly filter stations by distance, and returns the most recent price per station and fuel type.
+    /// </summary>
+    /// <param name="lat">Latitude of the center point (WGS84).</param>
+    /// <param name="lon">Longitude of the center point (WGS84).</param>
+    /// <param name="radiusKm">Search radius in kilometers.</param>
+    /// <param name="fuelTypeId">Optional fuel type ID to filter results.</param>
+    /// <returns>A collection of Price entities with eager-loaded GasStation and FuelType navigation properties.</returns>
     public async Task<IEnumerable<Price>> GetLatestPricesNearbyAsync(double lat, double lon, double radiusKm, int? fuelTypeId = null)
     {
-        // For now, we'll return a simplified version – we'll improve with spatial SQL later.
-        // This naive version gets all prices and filters in memory (not for production).
-        // Better approach: use raw SQL with PostGIS.
-        var query = _context.Prices
+        // Build the point as WKT (longitude first)
+        var pointWkt = $"POINT({lon} {lat})";
+        
+        // Base SQL with DISTINCT ON to get the latest price per station and fuel type
+        var sql = @"
+            SELECT DISTINCT ON (p.""GasStationId"", p.""FuelTypeId"") 
+                p.*
+            FROM ""Prices"" p
+            INNER JOIN ""GasStations"" gs ON p.""GasStationId"" = gs.""Id""
+            WHERE gs.""IsActive"" = true
+              AND ST_DWithin(gs.""Location"", ST_GeogFromText({0}), {1})
+        ";
+        
+        // Add fuel type filter if needed
+        if (fuelTypeId.HasValue)
+        {
+            sql += " AND p.\"FuelTypeId\" = {2}";
+        }
+        
+        sql += " ORDER BY p.\"GasStationId\", p.\"FuelTypeId\", p.\"UpdatedAt\" DESC;";
+        
+        // Prepare parameters
+        var parameters = fuelTypeId.HasValue
+            ? new object[] { pointWkt, radiusKm * 1000, fuelTypeId.Value }
+            : new object[] { pointWkt, radiusKm * 1000 };
+        
+        // Execute raw SQL and materialize the Price entities
+        var prices = await _context.Prices
+            .FromSqlRaw(sql, parameters)
             .Include(p => p.GasStation)
             .Include(p => p.FuelType)
-            .Where(p => p.GasStation.IsActive);
+            .ToListAsync();
 
-        if (fuelTypeId.HasValue)
-            query = query.Where(p => p.FuelTypeId == fuelTypeId.Value);
-
-        var allPrices = await query.ToListAsync();
-
-        // Filter by distance using Haversine formula (approximate)
-        var nearby = allPrices
-            .Where(p => CalculateDistance(lat, lon, p.GasStation.Latitude, p.GasStation.Longitude) <= radiusKm)
-            .GroupBy(p => new { p.GasStationId, p.FuelTypeId })
-            .Select(g => g.OrderByDescending(p => p.UpdatedAt).First())
-            .ToList();
-
-        return nearby;
+        return prices;
     }
-    
-    private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
-    {
-        // Haversine formula
-        const double r = 6371; // km
-        var dLat = DegreesToRadians(lat2 - lat1);
-        var dLon = DegreesToRadians(lon2 - lon1);
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-        return r * c;
-    }
-
-    private double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
 
     public async Task<Price> AddPriceAsync(Price price)
     {
