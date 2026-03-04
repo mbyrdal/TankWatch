@@ -1,4 +1,6 @@
-﻿namespace TankWatch.Core.Entities;
+﻿using NetTopologySuite.Geometries;
+
+namespace TankWatch.Core.Entities;
 
 public class GasStation : BaseEntity
 {
@@ -13,6 +15,9 @@ public class GasStation : BaseEntity
     public bool IsActive { get; set; } = true;
     public DateTime LastUpdated { get; set; }
 
+    // Computed column for PostGIS
+    public Point? Location { get; set; }
+    
     // Navigation
     public ICollection<Price>? Prices { get; set; }
 }
