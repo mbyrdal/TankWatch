@@ -70,8 +70,9 @@ builder.Services.AddHttpClient<Q8FuelPriceProvider>(client =>
     // No special headers required for this endpoint
 });
 
-// Background scraper service
+// Background services
 builder.Services.AddHostedService<PriceScraperService>();
+builder.Services.AddHostedService<GeocodingBackgroundService>();
 
 // Optional: Add Hangfire, Redis, etc.
 

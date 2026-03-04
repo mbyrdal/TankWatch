@@ -50,9 +50,10 @@ public class PriceScraperService : BackgroundService
         // Add more providers here as needed
     }
     
+    // Currently disabled because of CircleK API limitations... will still function though.
     private async Task ScrapeCircleKPricesAsync(CancellationToken stoppingToken) 
     {
-        _logger.LogInformation("Starting price scrape...");
+        _logger.LogInformation("Starting CircleK price scrape...");
 
         using var scope = _services.CreateScope();
         var circleKProvider = scope.ServiceProvider.GetRequiredService<CircleKFuelPriceProvider>();
