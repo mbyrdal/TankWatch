@@ -10,4 +10,9 @@
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\TankWatch.Core\TankWatch.Core.csproj" />
+      <ProjectReference Include="..\TankWatch.Infrastructure\TankWatch.Infrastructure.csproj" />
+    </ItemGroup>
+
 </Project>

@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\TankWatch.Core\TankWatch.Core.csproj" />
+    </ItemGroup>
+
 </Project>
