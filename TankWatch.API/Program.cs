@@ -18,9 +18,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     
 // Repositories
 builder.Services.AddScoped<IPriceRepository, PriceRepository>();
+builder.Services.AddScoped<IGasStationRepository, GasStationRepository>();
 
 // Services
 builder.Services.AddScoped<IPriceService, PriceService>();
+builder.Services.AddScoped<IGasStationService, GasStationService>();
 builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
 
 // SignalR
