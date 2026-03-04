@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Globalization;
+using Microsoft.EntityFrameworkCore;
 using TankWatch.Core.Entities;
 using TankWatch.Core.Interfaces;
 using TankWatch.Infrastructure.Data;
@@ -37,8 +38,8 @@ public class PriceRepository : IPriceRepository
     /// <returns>A collection of Price entities with eager-loaded GasStation and FuelType navigation properties.</returns>
     public async Task<IEnumerable<Price>> GetLatestPricesNearbyAsync(double lat, double lon, double radiusKm, int? fuelTypeId = null)
     {
-        // Build the point as WKT (longitude first)
-        var pointWkt = $"POINT({lon} {lat})";
+        // Build the point as WKT (longitude first); use invariant culture to ensure decimal point
+        var pointWkt = $"POINT({lon.ToString(CultureInfo.InvariantCulture)} {lat.ToString(CultureInfo.InvariantCulture)})";
         
         // Base SQL with DISTINCT ON to get the latest price per station and fuel type
         var sql = @"
@@ -56,7 +57,7 @@ public class PriceRepository : IPriceRepository
             sql += " AND p.\"FuelTypeId\" = {2}";
         }
         
-        sql += " ORDER BY p.\"GasStationId\", p.\"FuelTypeId\", p.\"UpdatedAt\" DESC;";
+        sql += " ORDER BY p.\"GasStationId\", p.\"FuelTypeId\", p.\"UpdatedAt\" DESC";
         
         // Prepare parameters
         var parameters = fuelTypeId.HasValue
