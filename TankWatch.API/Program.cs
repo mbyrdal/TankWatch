@@ -14,7 +14,10 @@ builder.Services.AddSwaggerGen();
 
 // Database context
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        o => o.UseNetTopologySuite()
+    ));
     
 // Repositories
 builder.Services.AddScoped<IPriceRepository, PriceRepository>();

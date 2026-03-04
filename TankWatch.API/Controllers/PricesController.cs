@@ -25,7 +25,22 @@ public class PricesController : ControllerBase
     [HttpPost("report")]
     public async Task<IActionResult> Report([FromBody] ReportPriceDto report)
     {
-        await _priceService.ReportPriceAsync(report.StationId, report.FuelTypeId, report.Amount, "user");
-        return Ok();
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            await _priceService.ReportPriceAsync(report.StationId, report.FuelTypeId, report.Amount, "user");
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Log the exception
+            return StatusCode(500, "An unexpected error occurred.");
+        }
     }
 }

@@ -25,10 +25,15 @@ public class GasStationsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<GasStationDto>> GetById(int id)
     {
-        var station = await _gasStationService.GetStationByIdAsync(id);
-        if (station == null)
-            return NotFound();
-        return Ok(station);
+        try
+        {
+            var station = await _gasStationService.GetStationByIdAsync(id);
+            return Ok(station);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound($"Gas station with id {id} not found.");
+        }
     }
     
     [HttpPost]
@@ -41,6 +46,9 @@ public class GasStationsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, CreateGasStationDto dto)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
         try
         {
             await _gasStationService.UpdateStationAsync(id, dto);
@@ -48,14 +56,21 @@ public class GasStationsController : ControllerBase
         }
         catch (KeyNotFoundException)
         {
-            return NotFound();
+            return NotFound($"Gas station with id {id} not found.");
         }
     }
     
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        await _gasStationService.DeleteStationAsync(id);
-        return NoContent();
+        try
+        {
+            await _gasStationService.DeleteStationAsync(id);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound($"Gas station with id {id} not found.");
+        }
     }
 }
