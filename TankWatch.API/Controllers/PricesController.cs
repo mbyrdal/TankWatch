@@ -40,7 +40,7 @@ public class PricesController : ControllerBase
         catch (Exception ex)
         {
             // Log the exception
-            return StatusCode(500, "An unexpected error occurred.");
+            return StatusCode(500, "An unexpected error occurred: "  + ex.Message);
         }
     }
 }

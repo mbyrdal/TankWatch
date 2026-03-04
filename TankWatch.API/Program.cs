@@ -1,6 +1,8 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using TankWatch.Core.Interfaces;
 using TankWatch.Infrastructure.Data;
+using TankWatch.Infrastructure.Geocoding;
 using TankWatch.Infrastructure.Hubs;
 using TankWatch.Infrastructure.Repositories;
 using TankWatch.Infrastructure.Services;
@@ -31,6 +33,35 @@ builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
 // SignalR
 builder.Services.AddSignalR();
 
+// Nominatim geocoder
+builder.Services.AddHttpClient<NominatimGeocoder>(client =>
+{
+    client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
+    
+    // Nominatim requires a User-Agent header with your app name and contact email
+    var email = builder.Configuration.GetValue<string>("NominatimEmail:UserAgentEmail");
+    
+    if (string.IsNullOrEmpty(email))
+        email = "tankwatch-app@example.com"; // fallback to avoid errors
+    
+    client.DefaultRequestHeaders.Add("User-Agent", $"TankWatch/1.0 ({email})");
+});
+
+// CircleK API client
+builder.Services.AddHttpClient<CircleKFuelPriceProvider>(client =>
+{
+    client.BaseAddress = new Uri("https://api.circlek.com/eu/prices/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("X-App-Name", "PRICES"); // Required header
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler // 
+    { 
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate //
+    });
+
+// Background scraper service
+builder.Services.AddHostedService<PriceScraperService>();
+
 // Optional: Add Hangfire, Redis, etc.
 
 var app = builder.Build();
@@ -46,8 +77,5 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<PriceHub>("/priceHub");
-
-// Optional: Hangfire dashboard
-// app.UseHangfireDashboard();
 
 app.Run();
