@@ -1,6 +1,0 @@
-@TankWatch.API_HostAddress = http://localhost:5122
-
-GET {{TankWatch.API_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

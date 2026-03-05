@@ -39,10 +39,10 @@ builder.Services.AddHttpClient<NominatimGeocoder>(client =>
     client.BaseAddress = new Uri("https://nominatim.openstreetmap.org/");
     
     // Nominatim requires a User-Agent header with your app name and contact email
-    var email = builder.Configuration.GetValue<string>("NominatimEmail:UserAgentEmail");
+    var email = builder.Configuration.GetValue<string>("NominatimPolicy:UserAgentEmail");
     
     if (string.IsNullOrEmpty(email))
-        email = "tankwatch-app@example.com"; // fallback to avoid errors
+        email = "mbyrdal10@gmail.com"; // fallback to avoid errors
     
     client.DefaultRequestHeaders.Add("User-Agent", $"TankWatch/1.0 ({email})");
 });
@@ -76,6 +76,18 @@ builder.Services.AddHostedService<GeocodingBackgroundService>();
 
 // Optional: Add Hangfire, Redis, etc.
 
+// Add CORS policy
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowVueFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173") // Vue dev server ... change if necessary
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials(); // needed for SignalR
+    });
+});
+
 var app = builder.Build();
 
 // Configure pipeline
@@ -86,6 +98,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseRouting();
+app.UseCors("AllowVueFrontend");
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<PriceHub>("/priceHub");
