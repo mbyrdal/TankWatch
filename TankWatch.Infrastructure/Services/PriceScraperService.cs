@@ -85,10 +85,8 @@ public class PriceScraperService : BackgroundService
             // FALLBACK: Geocode the address
             else if (!string.IsNullOrWhiteSpace(detail.Address.Street))
             {
-                var coords = await _geocoder.GeocodeAddressAsync(
-                    detail.Address.Street,
-                    detail.Address.City,
-                    detail.Address.PostalCode);
+                var fullAddress = $"{detail.Address.Street}, {detail.Address.PostalCode} {detail.Address.City}, Denmark";
+                var coords = await _geocoder.GeocodeAddressAsync(fullAddress);
 
                 if (coords.HasValue)
                 {

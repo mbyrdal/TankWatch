@@ -32,7 +32,7 @@ public class GeocodingBackgroundService  : BackgroundService
             }
 
             // Wait 24 hours before next run
-            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
     }
     
@@ -53,11 +53,8 @@ public class GeocodingBackgroundService  : BackgroundService
 
         foreach (var station in stationsToGeocode)
         {
-            // You can pass the full address string directly; Nominatim is smart enough to parse it.
-            var coords = await geocoder.GeocodeAddressAsync(
-                station.Address,   // full address
-                "",                // city (not needed separately)
-                "");               // postal code (not needed separately)
+            // Use full address string.
+            var coords = await geocoder.GeocodeAddressAsync(station.Address);
 
             if (coords.HasValue)
             {
