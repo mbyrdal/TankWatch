@@ -54,21 +54,39 @@ public class NominatimGeocoder
             cleanedAddress = Regex.Replace(cleanedAddress, @"\s+", " ").Trim();
 
             // 4. First attempt with cleaned address
-            var result = await TryGeocodeAsync(cleanedAddress, fullAddress);
+            var result = await TryGeocodeAsync(cleanedAddress);
             if (result.HasValue)
                 return result;
 
-            // 5. Fallback: try with brand + street name + number (if brand is provided)
+            // 5. Fallback attempts with brand
             if (!string.IsNullOrWhiteSpace(brand))
             {
-                // Extract street part (everything before the comma, if present)
+                // 5a. Try brand + street part (everything before the first comma)
                 var streetPart = fullAddress.Split(',')[0].Trim();
-                // Remove postal code and city if they appear in the street part (unlikely)
                 var fallbackQuery = $"{brand} {streetPart}";
-                _logger.LogInformation("Fallback geocoding with brand: {Fallback}", fallbackQuery);
-                result = await TryGeocodeAsync(fallbackQuery, fullAddress);
+                result = await TryGeocodeAsync(fallbackQuery);
                 if (result.HasValue)
                     return result;
+
+                // 5b. Try brand + core street name (without postal code and city)
+                var coreStreet = ExtractCoreStreet(fullAddress);
+                if (!string.IsNullOrWhiteSpace(coreStreet))
+                {
+                    fallbackQuery = $"{brand} {coreStreet}";
+                    result = await TryGeocodeAsync(fallbackQuery);
+                    if (result.HasValue)
+                        return result;
+                }
+
+                // 5c. Last resort: brand + first two words of the original address
+                var words = fullAddress.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (words.Length >= 2)
+                {
+                    fallbackQuery = $"{brand} {words[0]} {words[1]}";
+                    result = await TryGeocodeAsync(fallbackQuery);
+                    if (result.HasValue)
+                        return result;
+                }
             }
 
             _logger.LogWarning("No geocoding result for address: {Address}", fullAddress);
@@ -81,7 +99,21 @@ public class NominatimGeocoder
         }
     }
 
-    private async Task<(double Latitude, double Longitude)?> TryGeocodeAsync(string query, string originalAddress)
+    // Helper to extract the core street name by removing postal code and everything after it
+    private string ExtractCoreStreet(string address)
+    {
+        // Find the last 4-digit number (postal code) and remove it and everything after
+        var match = Regex.Match(address, @"\b\d{4}\b");
+        if (match.Success)
+        {
+            int index = match.Index;
+            return address.Substring(0, index).TrimEnd(',', ' ');
+        }
+        // If no postal code found, return the part before the first comma
+        return address.Split(',')[0].Trim();
+    }
+
+    private async Task<(double Latitude, double Longitude)?> TryGeocodeAsync(string query)
     {
         var url = $"search?q={Uri.EscapeDataString(query)}&format=json&limit=1";
         _logger.LogInformation("Geocoding request: {Url}", url);
