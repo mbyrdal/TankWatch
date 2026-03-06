@@ -31,50 +31,68 @@ public class GeocodingBackgroundService  : BackgroundService
                 _logger.LogError(ex, "Error occurred during geocoding job");
             }
 
-            // Wait 24 hours before next run
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            // Wait 6 hours before next run
+            await Task.Delay(TimeSpan.FromDays(7), stoppingToken);
         }
     }
     
     private async Task GeocodeMissingStationsAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Starting geocoding job for stations with missing coordinates...");
+        _logger.LogInformation("Starting geocoding job...");
 
         using var scope = _services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var geocoder = scope.ServiceProvider.GetRequiredService<NominatimGeocoder>();
 
-        // Find stations with latitude = 0 and a non-empty address
+        // Only stations with missing coordinates, address, and not attempted recently (7 days) and less than 5 attempts
+        var cutoff = DateTime.UtcNow.AddDays(-7);
         var stationsToGeocode = await context.GasStations
-            .Where(s => s.Latitude == 0 && s.Longitude == 0 && !string.IsNullOrWhiteSpace(s.Address))
+            .Where(s => s.Latitude == 0 && s.Longitude == 0 
+                        && !string.IsNullOrWhiteSpace(s.Address)
+                        && (s.LastGeocodeAttempt == null || s.LastGeocodeAttempt < cutoff)
+                        && s.GeocodeAttempts < 5)
+            .OrderBy(s => s.LastGeocodeAttempt) // oldest first
+            .Take(50) // max per run
             .ToListAsync(stoppingToken);
 
-        _logger.LogInformation("Found {Count} stations to geocode", stationsToGeocode.Count);
+        _logger.LogInformation("Found {Count} stations to geocode this run", stationsToGeocode.Count);
 
         foreach (var station in stationsToGeocode)
         {
-            // Use full address string.
-            var coords = await geocoder.GeocodeAddressAsync(station.Address);
+            station.LastGeocodeAttempt = DateTime.UtcNow;
+            station.GeocodeAttempts++;
 
-            if (coords.HasValue)
+            try
             {
-                station.Latitude = coords.Value.Latitude;
-                station.Longitude = coords.Value.Longitude;
-                station.LastUpdated = DateTime.UtcNow;
-                _logger.LogDebug("Geocoded station {StationId} ({Name}) to ({Lat}, {Lon})",
-                    station.Id, station.Name, station.Latitude, station.Longitude);
+                var coords = await geocoder.GeocodeAddressAsync(station.Address, station.Brand);
+
+                if (coords.HasValue)
+                {
+                    station.Latitude = coords.Value.Latitude;
+                    station.Longitude = coords.Value.Longitude;
+                    station.LastUpdated = DateTime.UtcNow;
+                    _logger.LogDebug("Geocoded station {StationId}", station.Id);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to geocode station {StationId}", station.Id);
+                }
             }
-            else
+            catch (HttpRequestException ex) when (ex.Message.Contains("429"))
             {
-                _logger.LogWarning("Failed to geocode station {StationId}: {Address}", station.Id, station.Address);
+                _logger.LogWarning("Rate limited (429) for station {StationId}. Stopping this run.", station.Id);
+                await context.SaveChangesAsync(stoppingToken);
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error geocoding station {StationId}", station.Id);
             }
 
             await context.SaveChangesAsync(stoppingToken);
-
-            // Respecting Nominatim's usage policy: 1 request per second
-            await Task.Delay(1000, stoppingToken);
+            await Task.Delay(2000, stoppingToken); // 2 seconds between stations
         }
 
-        _logger.LogInformation("Geocoding job completed.");
+        _logger.LogInformation("Geocoding job completed (processed {Count} stations).", stationsToGeocode.Count);
     }
 }

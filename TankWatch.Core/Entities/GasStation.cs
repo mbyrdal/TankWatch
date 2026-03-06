@@ -20,4 +20,8 @@ public class GasStation : BaseEntity
     
     // Navigation
     public ICollection<Price>? Prices { get; set; }
+    
+    // Geocoding purposes
+    public DateTime? LastGeocodeAttempt { get; set; }
+    public int GeocodeAttempts { get; set; }
 }

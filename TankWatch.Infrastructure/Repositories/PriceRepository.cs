@@ -38,33 +38,29 @@ public class PriceRepository : IPriceRepository
     /// <returns>A collection of Price entities with eager-loaded GasStation and FuelType navigation properties.</returns>
     public async Task<IEnumerable<Price>> GetLatestPricesNearbyAsync(double lat, double lon, double radiusKm, int? fuelTypeId = null)
     {
-        // Build the point as WKT (longitude first); use invariant culture to ensure decimal point
         var pointWkt = $"POINT({lon.ToString(CultureInfo.InvariantCulture)} {lat.ToString(CultureInfo.InvariantCulture)})";
-        
-        // Base SQL with DISTINCT ON to get the latest price per station and fuel type
+
         var sql = @"
-            SELECT DISTINCT ON (p.""GasStationId"", p.""FuelTypeId"") 
-                p.*
-            FROM ""Prices"" p
-            INNER JOIN ""GasStations"" gs ON p.""GasStationId"" = gs.""Id""
-            WHERE gs.""IsActive"" = true
-              AND ST_DWithin(gs.""Location"", ST_GeogFromText({0}), {1})
-        ";
-        
-        // Add fuel type filter if needed
+        SELECT DISTINCT ON (p.""GasStationId"", p.""FuelTypeId"") 
+            p.*
+        FROM ""Prices"" p
+        INNER JOIN ""GasStations"" gs ON p.""GasStationId"" = gs.""Id""
+        WHERE gs.""IsActive"" = true
+          AND gs.""Latitude"" != 0 AND gs.""Longitude"" != 0
+          AND ST_DWithin(gs.""Location"", ST_GeogFromText({0}), {1})
+    ";
+
         if (fuelTypeId.HasValue)
         {
             sql += " AND p.\"FuelTypeId\" = {2}";
         }
-        
+
         sql += " ORDER BY p.\"GasStationId\", p.\"FuelTypeId\", p.\"UpdatedAt\" DESC";
-        
-        // Prepare parameters
+
         var parameters = fuelTypeId.HasValue
             ? new object[] { pointWkt, radiusKm * 1000, fuelTypeId.Value }
             : new object[] { pointWkt, radiusKm * 1000 };
-        
-        // Execute raw SQL and materialize the Price entities
+
         var prices = await _context.Prices
             .FromSqlRaw(sql, parameters)
             .Include(p => p.GasStation)

@@ -15,8 +15,12 @@ export function useApi() {
   };
 
   const getNearbyPrices = async (lat: number, lon: number, radiusKm: number, fuelTypeId?: number): Promise<Price[]> => {
-    const params: any = { lat, lon, radiusKm };
-    if (fuelTypeId) params.fuelTypeId = fuelTypeId;
+    const params: any = {
+      Latitude: lat,
+      Longitude: lon,
+      RadiusKm: radiusKm
+    };
+    if (fuelTypeId) params.FuelTypeId = fuelTypeId;
     const response = await apiClient.get('/prices/nearby', { params });
     return response.data;
   };

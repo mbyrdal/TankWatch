@@ -12,6 +12,7 @@ export const useStationStore = defineStore('station', {
       this.stations = stations;
     },
     setNearbyPrices(prices: Price[]) {
+      console.log('Setting nearbyPrices:', prices);
       this.nearbyPrices = prices;
     },
     selectStation(station: Station) {

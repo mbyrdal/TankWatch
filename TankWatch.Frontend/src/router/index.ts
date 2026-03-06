@@ -10,9 +10,15 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/map',
+      name: 'map',
+      component: () => import('../views/MapView.vue'), // lazy-loaded
+    },
+    // optional about page
+    {
       path: '/about',
       name: 'about',
-      component: () => import('../views/AboutView.vue'), // optional
+      component: () => import('../views/AboutView.vue'),
     },
   ],
 });

@@ -1,127 +1,174 @@
 ﻿<template>
   <div class="home">
-    <h1>TankWatch – Find the best fuel prices near you</h1>
-    <div class="controls">
-      <input v-model.number="radius" type="number" placeholder="Radius (km)" />
-      <button @click="searchNearby" :disabled="!userLocation">Search nearby</button>
+    <h1>TankWatch – Fuel Price Overview</h1>
+    <p>Latest prices from Q8 and F24 stations (updated in real time)</p>
+
+    <div v-if="loading" class="loading">Loading prices...</div>
+    <div v-else>
+      <!-- Brand summary cards -->
+      <div class="brand-summary">
+        <div v-for="brand in brandSummary" :key="brand.name" class="brand-card">
+          <h3>{{ brand.name }}</h3>
+          <p>Stations: {{ brand.stationCount }}</p>
+          <p v-if="brand.diesel">
+            <strong>Diesel:</strong> {{ brand.diesel }} DKK
+            <small>({{ brand.dieselTime }})</small>
+          </p>
+          <p v-if="brand.benzin95">
+            <strong>Benzin 95:</strong> {{ brand.benzin95 }} DKK
+            <small>({{ brand.benzin95Time }})</small>
+          </p>
+          <p v-if="!brand.diesel && !brand.benzin95">No current prices</p>
+        </div>
+      </div>
+
+      <!-- Live feed component -->
+      <LiveFeed />
     </div>
-    <MapView
-      :stations="stationsWithPrices"
-      @station-selected="selectStation"
-    />
-    <div v-if="selectedStation" class="station-details">
-      <h3>{{ selectedStation.name }}</h3>
-      <p>{{ selectedStation.address }}, {{ selectedStation.city }} {{ selectedStation.postalCode }}</p>
-      <h4>Prices</h4>
-      <ul>
-        <li v-for="price in pricesForSelected" :key="price.fuelType">
-          {{ price.fuelType }}: {{ price.amount }} DKK
-          <small>(updated {{ new Date(price.updatedAt).toLocaleString() }})</small>
-        </li>
-      </ul>
-    </div>
+
+    <p class="map-link">
+      <router-link to="/map">Find stations near you →</router-link>
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import MapView from '../components/MapView.vue';
-import { useApi } from '../composables/useApi';
-import { useSignalR } from '../composables/useSignalR';
-import { useStationStore } from '../stores/stationStore';
+import { useApi } from '@/composables/useApi';
+import { useStationStore } from '@/stores/stationStore';
 import { storeToRefs } from 'pinia';
+import LiveFeed from '@/components/LiveFeed.vue';
+import type { Price } from '@/types';
 
 const api = useApi();
-const signalR = useSignalR();
 const store = useStationStore();
-const { stations, nearbyPrices, selectedStation } = storeToRefs(store);
+const { nearbyPrices } = storeToRefs(store);
+const loading = ref(true);
 
-const radius = ref(10);
-const userLocation = ref<{ lat: number; lon: number } | null>(null);
+// Default location (center of Denmark) with large radius to capture most prices
+const DEFAULT_LOCATION = { lat: 56.0, lng: 10.0 };
+const DEFAULT_RADIUS = 200; // km
 
-// Combine stations with their current prices for map markers
-const stationsWithPrices = computed(() => {
-  // Group nearbyPrices by stationId to attach to stations
-  const priceMap = new Map<number, Price[]>();
-  nearbyPrices.value.forEach(p => {
-    if (!priceMap.has(p.gasStationId)) priceMap.set(p.gasStationId, []);
-    priceMap.get(p.gasStationId)!.push(p);
-  });
-  return stations.value.map(s => ({
-    ...s,
-    prices: priceMap.get(s.id) || [],
-  }));
-});
+// Helper: extract brand from station name
+function getBrand(stationName: string): string {
+  if (stationName.includes('F24')) return 'F24';
+  if (stationName.includes('Q8')) return 'Q8';
+  return 'Andet';
+}
 
-const pricesForSelected = computed(() => {
-  if (!selectedStation.value) return [];
-  return nearbyPrices.value.filter(p => p.gasStationId === selectedStation.value!.id);
-});
+// Brand summary computed from nearbyPrices
+const brandSummary = computed(() => {
+  const map = new Map<string, {
+    diesel: { amount: number; time: Date } | null;
+    benzin95: { amount: number; time: Date } | null;
+    stations: Set<number>;
+  }>();
 
-// Get user's location
-onMounted(async () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        userLocation.value = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-        };
-        searchNearby();
-      },
-      (err) => {
-        console.warn('Geolocation failed, using default (Denmark center)');
-        userLocation.value = { lat: 56.0, lon: 10.0 };
-        searchNearby();
+  nearbyPrices.value.forEach((p: Price) => {
+    const brand = getBrand(p.stationName);
+    if (!map.has(brand)) {
+      map.set(brand, { diesel: null, benzin95: null, stations: new Set() });
+    }
+    const entry = map.get(brand)!;
+    entry.stations.add(p.gasStationId);
+
+    const priceTime = new Date(p.updatedAt);
+    if (p.fuelType === 'Diesel') {
+      // Keep the most recent diesel price
+      if (!entry.diesel || priceTime > entry.diesel.time) {
+        entry.diesel = { amount: p.amount, time: priceTime };
       }
-    );
-  } else {
-    userLocation.value = { lat: 56.0, lon: 10.0 };
-    searchNearby();
-  }
-
-  // Load all stations (for map markers)
-  try {
-    const allStations = await api.getAllStations();
-    store.setStations(allStations);
-  } catch (error) {
-    console.error('Failed to load stations', error);
-  }
-
-  // Set up SignalR for real‑time updates
-  await signalR.startConnection((updatedPrice) => {
-    store.updatePrice(updatedPrice);
+    } else if (p.fuelType === 'Benzin 95') {
+      if (!entry.benzin95 || priceTime > entry.benzin95.time) {
+        entry.benzin95 = { amount: p.amount, time: priceTime };
+      }
+    }
   });
+
+  return Array.from(map.entries())
+    .filter(([brand]) => brand === 'F24' || brand === 'Q8') // only show these two brands
+    .map(([name, data]) => ({
+      name,
+      stationCount: data.stations.size,
+      diesel: data.diesel?.amount.toFixed(2),
+      dieselTime: data.diesel?.time.toLocaleString(),
+      benzin95: data.benzin95?.amount.toFixed(2),
+      benzin95Time: data.benzin95?.time.toLocaleString(),
+    }));
 });
 
-async function searchNearby() {
-  if (!userLocation.value) return;
+onMounted(async () => {
   try {
+    // Fetch prices (stations are not needed for summary, but may be used elsewhere)
+    console.log('Fetching prices for', DEFAULT_LOCATION, 'radius', DEFAULT_RADIUS);
     const prices = await api.getNearbyPrices(
-      userLocation.value.lat,
-      userLocation.value.lon,
-      radius.value
+      DEFAULT_LOCATION.lat,
+      DEFAULT_LOCATION.lng,
+      DEFAULT_RADIUS
     );
+    console.log('Received prices:', prices);
     store.setNearbyPrices(prices);
   } catch (error) {
-    console.error('Failed to fetch nearby prices', error);
+    console.error('Failed to load prices', error);
+  } finally {
+    loading.value = false;
   }
-}
-
-function selectStation(stationId: number) {
-  const station = stations.value.find(s => s.id === stationId);
-  if (station) store.selectStation(station);
-}
+});
 </script>
 
 <style scoped>
-.controls {
-  margin: 20px 0;
+.home {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
 }
-.station-details {
-  margin-top: 20px;
-  padding: 15px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+.brand-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+.brand-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.brand-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+}
+.brand-card h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.5rem;
+  border-bottom: 2px solid #42b983;
+  padding-bottom: 0.5rem;
+}
+.brand-card p {
+  margin: 8px 0;
+}
+.loading {
+  text-align: center;
+  color: #666;
+  margin: 40px 0;
+}
+.map-link {
+  margin-top: 30px;
+  text-align: center;
+}
+.map-link a {
+  display: inline-block;
+  padding: 0.75rem 2rem;
+  background: #42b983;
+  color: white;
+  border-radius: 40px;
+  font-weight: bold;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.map-link a:hover {
+  background: #2c8e6b;
 }
 </style>

@@ -29,63 +29,35 @@ public class NominatimGeocoder
     {
         try
         {
-            // 1. Clean hyphenated number ranges: replace "2-8" with "2"
-            var cleanedAddress = Regex.Replace(fullAddress, @"(\d+)-(\d+)", "$1");
+            // 1. Basic cleaning
+            var cleaned = fullAddress
+                .Replace("Danmark", "")
+                .Replace("v/", " ")          // "v/" often means "ved" – remove or replace with space
+                .Trim();
 
-            // 2. Apply known street name corrections
-            var corrections = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                { "Hovedgaden", "Hovedgade" },
-                // Add other mismatches here as you find them
-            };
+            // 2. Remove house number ranges (e.g., "2-8" -> "2")
+            cleaned = Regex.Replace(cleaned, @"(\d+)-(\d+)", "$1");
 
-            foreach (var (original, corrected) in corrections)
-            {
-                if (cleanedAddress.Contains(original, StringComparison.OrdinalIgnoreCase))
-                {
-                    cleanedAddress = cleanedAddress.Replace(original, corrected, StringComparison.OrdinalIgnoreCase);
-                    break;
-                }
-            }
-
-            // 3. Remove directional suffixes that are separate words
-            var suffixPattern = @"\s+(" + string.Join("|", DirectionalSuffixes) + @")(?=\s|$)";
-            cleanedAddress = Regex.Replace(cleanedAddress, suffixPattern, "", RegexOptions.IgnoreCase);
-            cleanedAddress = Regex.Replace(cleanedAddress, @"\s+", " ").Trim();
-
-            // 4. First attempt with cleaned address
-            var result = await TryGeocodeAsync(cleanedAddress);
-            if (result.HasValue)
-                return result;
-
-            // 5. Fallback attempts with brand
+            // 3. Always try with brand + cleaned address first (if brand provided)
             if (!string.IsNullOrWhiteSpace(brand))
             {
-                // 5a. Try brand + street part (everything before the first comma)
-                var streetPart = fullAddress.Split(',')[0].Trim();
-                var fallbackQuery = $"{brand} {streetPart}";
-                result = await TryGeocodeAsync(fallbackQuery);
-                if (result.HasValue)
-                    return result;
+                var brandedQuery = $"{brand} {cleaned}";
+                var coords = await TryGeocodeAsync(brandedQuery);
+                if (coords.HasValue) return coords;
+            }
 
-                // 5b. Try brand + core street name (without postal code and city)
-                var coreStreet = ExtractCoreStreet(fullAddress);
-                if (!string.IsNullOrWhiteSpace(coreStreet))
-                {
-                    fallbackQuery = $"{brand} {coreStreet}";
-                    result = await TryGeocodeAsync(fallbackQuery);
-                    if (result.HasValue)
-                        return result;
-                }
+            // 4. Try just the cleaned address
+            var coords2 = await TryGeocodeAsync(cleaned);
+            if (coords2.HasValue) return coords2;
 
-                // 5c. Last resort: brand + first two words of the original address
-                var words = fullAddress.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (words.Length >= 2)
+            // 5. Fallback: brand + street name only (without house number)
+            if (!string.IsNullOrWhiteSpace(brand))
+            {
+                var streetPart = ExtractStreetName(cleaned);
+                if (!string.IsNullOrWhiteSpace(streetPart))
                 {
-                    fallbackQuery = $"{brand} {words[0]} {words[1]}";
-                    result = await TryGeocodeAsync(fallbackQuery);
-                    if (result.HasValue)
-                        return result;
+                    var fallback = $"{brand} {streetPart}";
+                    return await TryGeocodeAsync(fallback);
                 }
             }
 
@@ -100,16 +72,11 @@ public class NominatimGeocoder
     }
 
     // Helper to extract the core street name by removing postal code and everything after it
-    private string ExtractCoreStreet(string address)
+    private string ExtractStreetName(string address)
     {
-        // Find the last 4-digit number (postal code) and remove it and everything after
-        var match = Regex.Match(address, @"\b\d{4}\b");
-        if (match.Success)
-        {
-            int index = match.Index;
-            return address.Substring(0, index).TrimEnd(',', ' ');
-        }
-        // If no postal code found, return the part before the first comma
+        // Take everything before the first digit that is part of a house number
+        var match = Regex.Match(address, @"^(.*?)\s+\d");
+        if (match.Success) return match.Groups[1].Value.Trim();
         return address.Split(',')[0].Trim();
     }
 
@@ -120,6 +87,12 @@ public class NominatimGeocoder
 
         using var response = await _httpClient.GetAsync(url);
         var content = await response.Content.ReadAsStringAsync();
+
+        // Check for Nominatim rate-limiting
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            throw new HttpRequestException("429 Too Many Requests");
+        }
 
         if (!response.IsSuccessStatusCode)
         {
