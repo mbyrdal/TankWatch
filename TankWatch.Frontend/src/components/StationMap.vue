@@ -3,9 +3,13 @@
 </template>
 
 <script setup lang="ts">
+import { toRaw, shallowRef } from "vue";
 import { ref, onMounted, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster/dist/leaflet.markercluster.js';
 
 // Fix for missing marker images (not needed for custom icons but keep if you want fallback)
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -19,21 +23,25 @@ const mapContainer = ref<HTMLElement>();
 let map: L.Map | null = null;
 let markers: L.Marker[] = [];
 
-const props = defineProps<{
-  stations: any[];
-}>();
+// Zoom state flags
+let isZooming = false;
+let pendingUpdate = false;
+
+const props = defineProps<{ stations: any[]; }>();
 
 const emit = defineEmits<{
   (e: 'map-ready', map: L.Map): void;
   (e: 'bounds-changed'): void;
 }>();
 
+let markerCluster: L.MarkerClusterGroup | null = null;
+
 // Define custom icons
 const greenIcon = L.icon({
   iconUrl: '/fuel-marker-green.svg',
   iconSize: [30, 40],
-  iconAnchor: [15, 40],   // tip of the teardrop
-  popupAnchor: [0, -35]   // popup above the icon
+  iconAnchor: [15, 40],
+  popupAnchor: [0, -35]
 });
 
 const grayIcon = L.icon({
@@ -51,7 +59,7 @@ const greenIconSelected = L.icon({
 });
 
 const grayIconSelected = L.icon({
-  iconUrl: '/fuel-marker-gray-selected.svg', // create this file similarly
+  iconUrl: '/fuel-marker-gray-selected.svg',
   iconSize: [30, 40],
   iconAnchor: [15, 40],
   popupAnchor: [0, -35]
@@ -62,6 +70,16 @@ let selectedMarker: L.Marker | null = null;
 onMounted(() => {
   map = L.map(mapContainer.value!).setView([56.0, 10.0], 7);
 
+  // Track zoom state
+  map.on('zoomstart', () => { isZooming = true; });
+  map.on('zoomend', () => {
+    isZooming = false;
+    if (pendingUpdate) {
+      pendingUpdate = false;
+      updateMarkers(toRaw(props.stations));
+    }
+  });
+
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
@@ -71,23 +89,47 @@ onMounted(() => {
   map.on('zoomend', () => emit('bounds-changed'));
 });
 
-// Watch for station changes and update markers
-watch(() => props.stations, (newStations) => {
-  if (!map) return;
-  markers.forEach(marker => map!.removeLayer(marker));
-  selectedMarker = null; // clear selection when stations change
+// Extract marker update logic into a reusable function
+function updateMarkers(newStations: any[]) {
+  const rawMap = toRaw(map);
+  const rawStations = toRaw(newStations); // unproxy stations array
+
+  console.log('StationMap received stations:', rawStations.length);
+  if (!rawMap) return;
+
+  if (!markerCluster) {
+    markerCluster = L.markerClusterGroup({
+      polygonOptions: {
+        fillColor: '#42b983',
+        color: '#2c8e6b',
+        weight: 2,
+        opacity: 0.8,
+        fillOpacity: 0.3
+      },
+      spiderLegPolylineOptions: {
+        weight: 2,
+        color: '#42b983',
+        opacity: 0.7
+      }
+    });
+    rawMap.addLayer(markerCluster);
+  } else {
+    markerCluster.clearLayers();
+  }
+
+  selectedMarker = null;
   markers = [];
 
   const seen = new Set<number>();
-  newStations.forEach(station => {
+  rawStations.forEach(station => {
     if (station.latitude && station.longitude && !seen.has(station.id)) {
       seen.add(station.id);
 
       const hasPrices = station.prices && station.prices.length > 0;
       const icon = hasPrices ? greenIcon : grayIcon;
-      const marker = L.marker([station.latitude, station.longitude], { icon }).addTo(map!);
+      const marker = L.marker([station.latitude, station.longitude], { icon });
 
-      // Build popup content
+      // Build popup content (unchanged)
       let popupContent = `<b>${station.name}</b><br>${station.address}<br><small>Brand: ${station.brand}</small>`;
       if (hasPrices) {
         popupContent += '<br><br><b>Prices</b><br>';
@@ -98,25 +140,19 @@ watch(() => props.stations, (newStations) => {
       }
       marker.bindPopup(popupContent);
 
-      // Store whether this station has prices
       (marker as any).originalHasPrices = hasPrices;
 
-      // Click handler – selects the marker and changes icon
       marker.on('click', () => {
         if (selectedMarker !== marker) {
-          // Reset previous selected marker
           if (selectedMarker) {
             const original = (selectedMarker as any).originalHasPrices;
             selectedMarker.setIcon(original ? greenIcon : grayIcon);
           }
-          // Set current marker as selected
           marker.setIcon(hasPrices ? greenIconSelected : grayIconSelected);
           selectedMarker = marker;
         }
-        // If same marker, do nothing – popup toggle will handle closing
       });
 
-      // Popup close handler – revert icon when popup is closed
       marker.on('popupclose', () => {
         if (selectedMarker === marker) {
           marker.setIcon(hasPrices ? greenIcon : grayIcon);
@@ -124,9 +160,23 @@ watch(() => props.stations, (newStations) => {
         }
       });
 
+      toRaw(markerCluster).addLayer(marker);
       markers.push(marker);
     }
   });
+}
+
+// Watch for station changes with zoom deferral
+watch(() => props.stations, (newStations) => {
+  if (!map) {
+    console.warn('Map not ready yet');
+    return;
+  }
+  if (isZooming) {
+    pendingUpdate = true;
+  } else {
+    updateMarkers(toRaw(newStations));
+  }
 }, { deep: true, immediate: true });
 </script>
 

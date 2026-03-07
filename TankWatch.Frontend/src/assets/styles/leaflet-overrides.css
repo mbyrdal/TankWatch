@@ -1,0 +1,34 @@
+﻿/* ------------------------------------------------------------------
+   LEAFLET CLUSTER OVERRIDES
+   Solid green clusters (#42b983) with white text
+   ------------------------------------------------------------------ */
+
+/* Small clusters */
+.marker-cluster-small {
+  background-color: #42b983 !important;
+}
+
+.marker-cluster-small div {
+  background-color: #42b983 !important;
+  color: #ffffff !important;
+}
+
+/* Medium clusters */
+.marker-cluster-medium {
+  background-color: #42b983 !important;
+}
+
+.marker-cluster-medium div {
+  background-color: #42b983 !important;
+  color: #ffffff !important;
+}
+
+/* Large clusters */
+.marker-cluster-large {
+  background-color: #42b983 !important;
+}
+
+.marker-cluster-large div {
+  background-color: #42b983 !important;
+  color: #ffffff !important;
+}

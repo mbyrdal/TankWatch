@@ -9,10 +9,29 @@
         @location-error="onLocationError"
       />
 
+      <div class="clear-location" v-if="userLocation">
+        <button @click="clearLocation" class="clear-btn">✕ Clear location</button>
+      </div>
+
       <!-- Radius slider -->
       <div class="radius-control">
         <label>Radius: {{ radius }} km (Max 200)</label>
         <input type="range" v-model.number="radius" min="1" max="200" step="1" />
+      </div>
+
+      <!-- Brand filter -->
+      <div class="filter-section">
+        <h3>Filter by brand</h3>
+        <div v-for="brand in availableBrands" :key="brand" class="brand-checkbox">
+          <label>
+            <input type="checkbox" :value="brand" v-model="selectedBrandsArray" />
+            {{ brand }}
+          </label>
+        </div>
+        <div class="filter-actions">
+          <button @click="selectedBrandsArray = availableBrands">Select all</button>
+          <button @click="selectedBrandsArray = []">Clear all</button>
+        </div>
       </div>
 
       <!-- Station counter (only visible when map is ready) -->
@@ -39,6 +58,7 @@
 </template>
 
 <script setup lang="ts">
+import { toRaw, shallowRef } from 'vue';
 import { ref, computed, onMounted, watch } from 'vue';
 import StationMap from '@/components/StationMap.vue';
 import LocationPicker from '@/components/LocationPicker.vue';
@@ -54,15 +74,48 @@ const store = useStationStore();
 const { stations, nearbyPrices } = storeToRefs(store);
 
 const mapComponent = ref<InstanceType<typeof StationMap> | null>(null);
-const map = ref<L.Map | null>(null);
+const map = shallowRef<L.Map | null>(null);
 const radius = ref(10);
-const userLocation = ref<{ lat: number; lng: number } | null>(null);
+const userLocation = shallowRef<{ lat: number; lng: number } | null>(null);
 const locationError = ref<string | null>(null);
 const visibleStationCounts = ref<Record<string, number>>({});
 
+// Brand filter (Gas stations)
+const selectedBrandsArray = ref<string[]>([]);
+const selectedBrandsSet = computed(() => new Set(selectedBrandsArray.value));
+
+const availableBrands = computed(() => {
+  const brands = new Set<string>();
+  stations.value.forEach(s => {
+    if (s.brand) brands.add(s.brand);
+  });
+  return Array.from(brands).sort();
+});
+
+// User marker declaration & setup
+let userMarker: L.Marker | null = null;
+
+function updateUserLocationMarker(location: { lat: number; lng: number }) {
+  if (!map.value) return;
+  if (userMarker) toRaw(map.value).removeLayer(userMarker);
+  userMarker = L.circleMarker([location.lat, location.lng], {
+    radius: 8,
+    fillColor: '#ff4444',
+    color: '#ffffff',
+    weight: 2,
+    opacity: 1,
+    fillOpacity: 0.9
+  }).addTo(toRaw(map.value));
+  userMarker.bindPopup('You are here');
+}
+
 // Watch for userLocation changes (debugging)
 watch(userLocation, (newLoc) => {
-  console.log('userLocation updated:', newLoc);
+  if (!map.value) return;
+  if (!newLoc && userMarker) {
+    toRaw(map.value).removeLayer(userMarker);
+    userMarker = null;
+  }
 }, { immediate: true });
 
 const stationsWithPrices = computed(() => {
@@ -94,8 +147,59 @@ const stationsWithPrices = computed(() => {
       hasPrices: (priceMap.get(s.id)?.length ?? 0) > 0,
     });
   });
-  return Array.from(uniqueStations.values());
+
+  let result = Array.from(uniqueStations.values());
+
+  // Apply brand filter
+  if (selectedBrandsSet.value.size === 0) {
+    console.log('No brands selected – showing 0 stations');
+    return []; // No markers when no brands checked
+  }
+
+  console.log('Selected brands:', Array.from(selectedBrandsSet.value));
+  const before = result.length;
+  result = result.filter(s => selectedBrandsSet.value.has(s.brand));
+  console.log(`Filtered from ${before} to ${result.length} stations`);
+
+  return result;
 });
+
+// Watch for location clerage and then remove marker
+watch(userLocation, (newLoc) => {
+  if (!map.value) return;
+  if (!newLoc && userMarker) {
+    map.value.removeLayer(userMarker);
+    userMarker = null;
+  }
+}, { immediate: true });
+
+// radiusCircle declaration
+let radiusCircle: L.Circle | null = null;
+
+function updateRadiusCircle() {
+  if (!map.value) return;
+
+  if (!userLocation.value) {
+    if (radiusCircle) {
+      toRaw(map.value).removeLayer(radiusCircle);
+      radiusCircle = null;
+    }
+    return;
+  }
+
+  if (radiusCircle) {
+    radiusCircle.setLatLng([userLocation.value.lat, userLocation.value.lng]);
+    radiusCircle.setRadius(radius.value * 1000);
+  } else {
+    radiusCircle = L.circle([userLocation.value.lat, userLocation.value.lng], {
+      radius: radius.value * 1000,
+      color: '#ff4444',
+      weight: 2,
+      fillColor: '#ff4444',
+      fillOpacity: 0.1
+    }).addTo(toRaw(map.value));
+  }
+}
 
 // ---- Event Handlers ----
 function onMapReady(leafletMap: L.Map) {
@@ -103,6 +207,8 @@ function onMapReady(leafletMap: L.Map) {
   // If we already have a user location, center map on it
   if (userLocation.value) {
     leafletMap.setView([userLocation.value.lat, userLocation.value.lng], 12);
+    updateRadiusCircle();
+    updateUserLocationMarker(userLocation.value);
   }
 }
 
@@ -136,6 +242,8 @@ function onLocationSelected(location: { lat: number; lng: number }) {
   }
   userLocation.value = location;
   locationError.value = null;
+  updateUserLocationMarker(location); // place marker at user's location
+  updateRadiusCircle();
   if (map.value) {
     map.value.setView([location.lat, location.lng], 12);
   }
@@ -144,6 +252,21 @@ function onLocationSelected(location: { lat: number; lng: number }) {
 
 function onLocationError(message: string) {
   locationError.value = message;
+}
+
+// Clear user location marker and radius circle
+function clearLocation() {
+  userLocation.value = null;
+  locationError.value = null;
+
+  if (userMarker) {
+    toRaw(map.value).removeLayer(userMarker);
+    userMarker = null;
+  }
+
+  if (map.value) {
+    toRaw(map.value).setView([56.0, 10.0], 7);
+  }
 }
 
 async function searchNearby() {
@@ -186,12 +309,18 @@ watch(stationsWithPrices, () => {
   updateStationCounts();
 }, { deep: true });
 
+// Update circle whenever userLocation or radius changes
+watch([userLocation, radius], () => {
+  updateRadiusCircle();
+}, { immediate: true });
+
 // ---- Lifecycle ----
 onMounted(async () => {
   // Load all stations for the map (needed to display markers even without prices)
   try {
     const allStations = await api.getAllStations();
     store.setStations(allStations);
+    selectedBrandsArray.value = availableBrands.value;
   } catch (error) {
     console.error('Failed to load stations', error);
   }
@@ -267,7 +396,7 @@ onMounted(async () => {
   box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.2);
 }
 
-/* ===== NEW BUTTON STYLES (gradient, shadow, refined hover) ===== */
+/* BUTTON STYLES (gradient, shadow, refined hover) */
 .location-picker button,
 .sidebar button {
   background: linear-gradient(145deg, #42b983, #2c8e6b);
@@ -309,7 +438,7 @@ onMounted(async () => {
   opacity: 0.7;
 }
 
-/* Optional: make "Set" and "Search" buttons slightly smaller (remove if you want them full width) */
+/* Make "Set" and "Search" buttons slightly smaller */
 .location-picker .coords button,
 .location-picker .address button {
   padding: 0.5rem 1rem;
@@ -317,7 +446,7 @@ onMounted(async () => {
   width: auto;
   flex: 0 0 auto;
 }
-/* ===== END BUTTON STYLES ===== */
+/* END BUTTON STYLES */
 
 /* Radius control */
 .radius-control {
@@ -347,6 +476,80 @@ onMounted(async () => {
   background: #42b983;
   border-radius: 50%;
   cursor: pointer;
+}
+
+/* Brand filter stylings */
+.filter-section {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 12px;
+}
+.filter-section h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem 0;
+  color: #2c3e50;
+}
+
+/* Custom checkbox styling */
+.brand-checkbox {
+  position: relative;
+  margin: 0.5rem 0;
+}
+.brand-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.brand-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #42b983;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+}
+.brand-checkbox input[type="checkbox"]:checked {
+  background: #42b983;
+  border-color: #42b983;
+}
+.brand-checkbox input[type="checkbox"]:checked::after {
+  content: '✓';
+  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: bold;
+}
+.brand-checkbox input[type="checkbox"]:focus {
+  box-shadow: 0 0 0 3px rgba(66, 185, 131, 0.2);
+}
+.filter-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.filter-actions button {
+  flex: 1;
+  padding: 0.4rem 0;
+  font-size: 0.85rem;
+  background: #e7f3ed;
+  color: #2c3e50;
+  border: 1px solid #42b983;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.filter-actions button:hover {
+  background: #d0e8dc;
 }
 
 /* Station counter pills */
