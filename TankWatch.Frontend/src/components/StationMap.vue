@@ -12,6 +12,11 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster/dist/leaflet.markercluster.js';
 
+// Add Gas station icons
+import grayMarker from '@/assets/fuel-marker-gray.svg';
+import greenMarker from '@/assets/fuel-marker-green.svg';
+import greenSelectedMarker from '@/assets/fuel-marker-green-selected.svg';
+
 // Fix for missing marker images (not needed for custom icons but keep if you want fallback)
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -39,21 +44,21 @@ let markerCluster: L.MarkerClusterGroup | null = null;
 
 // Define custom icons
 const greenIcon = L.icon({
-  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-green.svg`,
+  iconUrl: greenMarker,
   iconSize: [30, 40],
   iconAnchor: [15, 40],
   popupAnchor: [0, -35]
 });
 
 const grayIcon = L.icon({
-  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-gray.svg`,
+  iconUrl: grayMarker,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34]
 });
 
 const greenIconSelected = L.icon({
-  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-green-selected.svg`,
+  iconUrl: greenSelectedMarker,
   iconSize: [30, 40],
   iconAnchor: [15, 40],
   popupAnchor: [0, -35]
