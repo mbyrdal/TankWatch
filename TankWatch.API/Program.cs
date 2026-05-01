@@ -106,4 +106,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<PriceHub>("/priceHub");
 
+// Health check
+app.MapGet("/health", () => "OK");
+
 app.Run();
