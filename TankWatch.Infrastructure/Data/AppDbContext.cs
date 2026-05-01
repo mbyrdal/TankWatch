@@ -50,5 +50,17 @@ public class AppDbContext : DbContext
             new FuelType { Id = 2, Name = "Benzin 95", Code = "95" },
             new FuelType { Id = 3, Name = "Benzin 98", Code = "98" }
         );
+        
+        // PriceHistory configuration
+        modelBuilder.Entity<PriceHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.GasStationId, e.FuelTypeId, e.ValidFrom });
+            entity.HasIndex(e => e.ValidTo); // for finding current active prices
+
+            entity.Property(e => e.Amount).HasPrecision(5, 2);
+            entity.Property(e => e.ValidFrom).IsRequired();
+            entity.Property(e => e.ValidTo).IsRequired(false);
+        });
     }
 }
