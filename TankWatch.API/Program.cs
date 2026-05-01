@@ -80,12 +80,12 @@ builder.Services.AddHostedService<GeocodingBackgroundService>();
 // Add CORS policy
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowVueFrontend", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:5173") // Vue dev server ... change if necessary
+        policy.AllowAnyOrigin()
             .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials(); // needed for SignalR
+            .AllowAnyHeader();
+        // .AllowCredentials() // can't use with AllowAnyOrigin
     });
 });
 
