@@ -82,15 +82,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        // Allow your GitHub Pages URL and local development
-        policy.WithOrigins(
-                "https://mbyrdal.github.io", // GitHub pages
-                "http://localhost:5173", // local Vue dev server
-                "http://localhost:5174"
-            )
+        policy.WithOrigins("https://mbyrdal.github.io", "http://localhost:5173")
             .AllowAnyMethod()
-            .AllowAnyHeader();
-        // .AllowCredentials() // not needed for this setup
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
