@@ -3,9 +3,10 @@
 </template>
 
 <script setup lang="ts">
+import 'leaflet.markercluster';
+import * as L from 'leaflet';
 import { toRaw, shallowRef } from "vue";
 import { ref, onMounted, watch } from 'vue';
-import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -160,7 +161,9 @@ function updateMarkers(newStations: any[]) {
         }
       });
 
-      toRaw(markerCluster).addLayer(marker);
+      if (markerCluster) {
+        toRaw(markerCluster).addLayer(marker);
+      }
       markers.push(marker);
     }
   });

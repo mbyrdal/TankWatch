@@ -2,7 +2,7 @@
   <div class="price-development">
     <h2>Price development</h2>
 
-    <div v-if="loadingFuelTypes" class="loading">Loading fuel types…</div>
+    <div v-if="loadingStations" class="loading">Loading stations…</div>
 
     <div v-else>
       <div class="controls">
@@ -59,7 +59,7 @@ const selectedBrand = ref<'F24' | 'Q8'>('F24');
 const selectedFuelTypeId = ref<number | null>(null);
 const days = ref('30');
 const historyData = ref<{ date: string; price: number }[]>([]);
-const loadingFuelTypes = ref(true);
+const loadingStations = ref(false); // we only load fuel types, not stations
 const loadingHistory = ref(false);
 const chartCanvas = ref<HTMLCanvasElement | null>(null);
 let chartInstance: Chart | null = null;
@@ -69,13 +69,13 @@ onMounted(async () => {
     if (fuelTypes.value.length === 0) {
       await stationStore.fetchFuelTypes();
     }
-    if (fuelTypes.value.length) {
+    if (fuelTypes.value.length && fuelTypes.value[0]) {
       selectedFuelTypeId.value = fuelTypes.value[0].id;
     }
   } catch (err) {
     console.error('Failed to load fuel types', err);
   } finally {
-    loadingFuelTypes.value = false;
+    loadingStations.value = false;
   }
 });
 
@@ -83,8 +83,12 @@ watch([selectedBrand, selectedFuelTypeId, days], async () => {
   if (!selectedFuelTypeId.value) return;
   loadingHistory.value = true;
   try {
-    const data = await api.getBrandPriceHistory(selectedBrand.value, selectedFuelTypeId.value, parseInt(days.value));
-    historyData.value = data.map(d => ({
+    const data = await api.getBrandPriceHistory(
+      selectedBrand.value,
+      selectedFuelTypeId.value,
+      parseInt(days.value)
+    );
+    historyData.value = data.map((d: { date: string; price: number }) => ({
       date: new Date(d.date).toLocaleDateString(),
       price: d.price,
     }));
@@ -107,6 +111,7 @@ watch(chartCanvas, (canvas) => {
 function renderChart() {
   if (!chartCanvas.value) return;
   if (chartInstance) chartInstance.destroy();
+
   chartInstance = new Chart(chartCanvas.value, {
     type: 'line',
     data: {
@@ -138,12 +143,45 @@ function renderChart() {
 </script>
 
 <style scoped>
-.price-development { background: #f9f9f9; border-radius: 16px; padding: 1.5rem; margin-top: 2rem; }
-.price-development h2 { margin-top: 0; color: #2c3e50; font-size: 1.4rem; }
-.controls { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-.control-group { display: flex; align-items: center; gap: 0.5rem; }
-.control-group label { font-weight: 600; color: #2c3e50; }
-.control-group select { padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid #ccc; background: white; }
-.loading, .no-data { text-align: center; padding: 2rem; color: #666; }
-canvas { max-height: 400px; width: 100%; }
+.price-development {
+  background: #f9f9f9;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+.price-development h2 {
+  margin-top: 0;
+  color: #2c3e50;
+  font-size: 1.4rem;
+}
+.controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.control-group label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+.control-group select {
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: white;
+}
+.loading, .no-data {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+canvas {
+  max-height: 400px;
+  width: 100%;
+}
 </style>

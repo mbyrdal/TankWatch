@@ -1,5 +1,5 @@
 ﻿import axios from 'axios';
-import type { Station, Price } from '../types';
+import type { Station, Price, FuelType } from '../types';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5122/api',

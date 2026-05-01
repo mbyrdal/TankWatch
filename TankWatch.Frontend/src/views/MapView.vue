@@ -58,48 +58,49 @@
 </template>
 
 <script setup lang="ts">
-import * as L from 'leaflet';
-import 'leaflet.markercluster';
-import { toRaw, shallowRef } from 'vue';
-import { ref, computed, onMounted, watch } from 'vue';
-import StationMap from '@/components/StationMap.vue';
-import LocationPicker from '@/components/LocationPicker.vue';
-import { useApi } from '@/composables/useApi';
-import { useSignalR } from '@/composables/useSignalR';
-import { useStationStore } from '@/stores/stationStore';
-import { storeToRefs } from 'pinia';
-import type { Station, Price, FuelType } from '@/types';
+// --- Leaflet imports ---
+import * as L from 'leaflet'
+import 'leaflet.markercluster' // This adds markerClusterGroup to L
 
-const api = useApi();
-const signalR = useSignalR();
-const store = useStationStore();
-const { stations, nearbyPrices } = storeToRefs(store);
+import { ref, computed, onMounted, watch, shallowRef } from 'vue'
+import StationMap from '@/components/StationMap.vue'
+import LocationPicker from '@/components/LocationPicker.vue'
+import { useApi } from '@/composables/useApi'
+import { useSignalR } from '@/composables/useSignalR'
+import { useStationStore } from '@/stores/stationStore'
+import { storeToRefs } from 'pinia'
+import type { Station, Price, FuelType } from '@/types'
 
-const mapComponent = ref<InstanceType<typeof StationMap> | null>(null);
-const map = shallowRef<L.Map | null>(null);
-const radius = ref(10);
-const userLocation = shallowRef<{ lat: number; lng: number } | null>(null);
-const locationError = ref<string | null>(null);
-const visibleStationCounts = ref<Record<string, number>>({});
+const api = useApi()
+const signalR = useSignalR()
+const store = useStationStore()
+const { stations, nearbyPrices } = storeToRefs(store)
 
-// Brand filter (Gas stations)
-const selectedBrandsArray = ref<string[]>([]);
-const selectedBrandsSet = computed(() => new Set(selectedBrandsArray.value));
+const mapComponent = ref<InstanceType<typeof StationMap> | null>(null)
+const map = shallowRef<L.Map | null>(null)
+const radius = ref(10)
+const userLocation = shallowRef<{ lat: number; lng: number } | null>(null)
+const locationError = ref<string | null>(null)
+const visibleStationCounts = ref<Record<string, number>>({})
+
+// Brand filter
+const selectedBrandsArray = ref<string[]>([])
+const selectedBrandsSet = computed(() => new Set(selectedBrandsArray.value))
 
 const availableBrands = computed(() => {
-  const brands = new Set<string>();
+  const brands = new Set<string>()
   stations.value.forEach(s => {
-    if (s.brand) brands.add(s.brand);
-  });
-  return Array.from(brands).sort();
-});
+    if (s.brand) brands.add(s.brand)
+  })
+  return Array.from(brands).sort()
+})
 
-// User marker declaration & setup
-let userMarker: L.Marker | null = null;
+// User marker – now correctly typed as CircleMarker
+let userMarker: L.CircleMarker | null = null
 
 function updateUserLocationMarker(location: { lat: number; lng: number }) {
-  if (!map.value) return;
-  if (userMarker) toRaw(map.value).removeLayer(userMarker);
+  if (!map.value) return
+  if (userMarker) map.value.removeLayer(userMarker)
   userMarker = L.circleMarker([location.lat, location.lng], {
     radius: 8,
     fillColor: '#ff4444',
@@ -107,91 +108,71 @@ function updateUserLocationMarker(location: { lat: number; lng: number }) {
     weight: 2,
     opacity: 1,
     fillOpacity: 0.9
-  }).addTo(toRaw(map.value));
-  userMarker.bindPopup('You are here');
+  }).addTo(map.value)
+  userMarker.bindPopup('You are here')
 }
 
-// Watch for userLocation changes (debugging)
+// Watch for userLocation changes
 watch(userLocation, (newLoc) => {
-  if (!map.value) return;
+  if (!map.value) return
   if (!newLoc && userMarker) {
-    toRaw(map.value).removeLayer(userMarker);
-    userMarker = null;
+    map.value.removeLayer(userMarker)
+    userMarker = null
   }
-}, { immediate: true });
+}, { immediate: true })
 
+// Computed stations with prices and radius/brand filtering
 const stationsWithPrices = computed(() => {
-  const priceMap = new Map<number, Price[]>();
+  const priceMap = new Map<number, Price[]>()
   nearbyPrices.value.forEach(p => {
-    if (!priceMap.has(p.gasStationId)) priceMap.set(p.gasStationId, []);
-    priceMap.get(p.gasStationId)!.push(p);
-  });
+    if (!priceMap.has(p.gasStationId)) priceMap.set(p.gasStationId, [])
+    priceMap.get(p.gasStationId)!.push(p)
+  })
 
-  // Start with all stations that have valid coordinates
-  let stationsToShow = stations.value.filter(s => s.latitude && s.longitude);
+  let stationsToShow = stations.value.filter(s => s.latitude && s.longitude)
 
-  // Apply radius filter only if user location exists
   if (userLocation.value) {
-    const center = userLocation.value;
-    const maxDist = radius.value;
+    const center = userLocation.value
+    const maxDist = radius.value
     stationsToShow = stationsToShow.filter(s => {
-      const dist = getDistanceFromLatLonInKm(center.lat, center.lng, s.latitude, s.longitude);
-      return dist <= maxDist;
-    });
-  } // else show all stations with coordinates
+      const dist = getDistanceFromLatLonInKm(center.lat, center.lng, s.latitude, s.longitude)
+      return dist <= maxDist
+    })
+  }
 
-  // Deduplicate by ID and attach prices
-  const uniqueStations = new Map<number, any>();
+  const uniqueStations = new Map<number, any>()
   stationsToShow.forEach((s: Station) => {
     uniqueStations.set(s.id, {
       ...s,
       prices: priceMap.get(s.id) || [],
       hasPrices: (priceMap.get(s.id)?.length ?? 0) > 0,
-    });
-  });
+    })
+  })
 
-  let result = Array.from(uniqueStations.values());
+  let result = Array.from(uniqueStations.values())
 
-  // Apply brand filter
   if (selectedBrandsSet.value.size === 0) {
-    console.log('No brands selected – showing 0 stations');
-    return []; // No markers when no brands checked
+    return []
   }
+  result = result.filter(s => selectedBrandsSet.value.has(s.brand))
+  return result
+})
 
-  console.log('Selected brands:', Array.from(selectedBrandsSet.value));
-  const before = result.length;
-  result = result.filter(s => selectedBrandsSet.value.has(s.brand));
-  console.log(`Filtered from ${before} to ${result.length} stations`);
-
-  return result;
-});
-
-// Watch for location clerage and then remove marker
-watch(userLocation, (newLoc) => {
-  if (!map.value) return;
-  if (!newLoc && userMarker) {
-    map.value.removeLayer(userMarker);
-    userMarker = null;
-  }
-}, { immediate: true });
-
-// radiusCircle declaration
-let radiusCircle: L.Circle | null = null;
+// Radius circle
+let radiusCircle: L.Circle | null = null
 
 function updateRadiusCircle() {
-  if (!map.value) return;
-
+  if (!map.value) return
   if (!userLocation.value) {
     if (radiusCircle) {
-      toRaw(map.value).removeLayer(radiusCircle);
-      radiusCircle = null;
+      map.value.removeLayer(radiusCircle)
+      radiusCircle = null
     }
-    return;
+    return
   }
-
   if (radiusCircle) {
-    radiusCircle.setLatLng([userLocation.value.lat, userLocation.value.lng]);
-    radiusCircle.setRadius(radius.value * 1000);
+    radiusCircle.setLatLng([userLocation.value.lat, userLocation.value.lng])
+    radiusCircle.setRadius(radius.value * 1000)
   } else {
     radiusCircle = L.circle([userLocation.value.lat, userLocation.value.lng], {
       radius: radius.value * 1000,
@@ -199,139 +180,122 @@ function updateRadiusCircle() {
       weight: 2,
       fillColor: '#ff4444',
       fillOpacity: 0.1
-    }).addTo(toRaw(map.value));
+    }).addTo(map.value)
   }
 }
 
-// ---- Event Handlers ----
+// Event handlers
 function onMapReady(leafletMap: L.Map) {
-  map.value = leafletMap;
-  // If we already have a user location, center map on it
+  map.value = leafletMap
   if (userLocation.value) {
-    leafletMap.setView([userLocation.value.lat, userLocation.value.lng], 12);
-    updateRadiusCircle();
-    updateUserLocationMarker(userLocation.value);
+    leafletMap.setView([userLocation.value.lat, userLocation.value.lng], 12)
+    updateRadiusCircle()
+    updateUserLocationMarker(userLocation.value)
   }
 }
 
 function updateStationCounts() {
-  if (!map.value) return; // map ready guard (optional)
-  const stationsToCount = stationsWithPrices.value; // all stations that passed radius filter
-  const counts: Record<string, number> = {};
-  let noPriceCount = 0;
+  const stationsToCount = stationsWithPrices.value
+  const counts: Record<string, number> = {}
+  let noPriceCount = 0
   stationsToCount.forEach((station: any) => {
     if (station.hasPrices) {
       station.prices.forEach((price: Price) => {
-        counts[price.fuelType] = (counts[price.fuelType] || 0) + 1;
-      });
+        counts[price.fuelType] = (counts[price.fuelType] || 0) + 1
+      })
     } else {
-      noPriceCount++;
+      noPriceCount++
     }
-  });
+  })
   if (noPriceCount > 0) {
-    counts['No prices'] = noPriceCount;
+    counts['No prices'] = noPriceCount
   }
-  visibleStationCounts.value = counts;
+  visibleStationCounts.value = counts
 }
 
 function onLocationSelected(location: { lat: number; lng: number }) {
-  // Basic bounds for Denmark (roughly)
   if (location.lat < 54 || location.lat > 58 || location.lng < 8 || location.lng > 15) {
-    console.warn('Location outside Denmark, using default', location);
-    locationError.value = 'Location outside Denmark – using default (center of Denmark)';
-    // Fallback to center of Denmark
-    location = { lat: 56.0, lng: 10.0 };
+    console.warn('Location outside Denmark, using default', location)
+    locationError.value = 'Location outside Denmark – using default (center of Denmark)'
+    location = { lat: 56.0, lng: 10.0 }
   }
-  userLocation.value = location;
-  locationError.value = null;
-  updateUserLocationMarker(location); // place marker at user's location
-  updateRadiusCircle();
+  userLocation.value = location
+  locationError.value = null
+  updateUserLocationMarker(location)
+  updateRadiusCircle()
   if (map.value) {
-    map.value.setView([location.lat, location.lng], 12);
+    map.value.setView([location.lat, location.lng], 12)
   }
-  searchNearby();
+  searchNearby()
 }
 
 function onLocationError(message: string) {
-  locationError.value = message;
+  locationError.value = message
 }
 
-// Clear user location marker and radius circle
 function clearLocation() {
-  userLocation.value = null;
-  locationError.value = null;
-
+  userLocation.value = null
+  locationError.value = null
   if (userMarker) {
-    toRaw(map.value).removeLayer(userMarker);
-    userMarker = null;
+    map.value?.removeLayer(userMarker)
+    userMarker = null
   }
-
   if (map.value) {
-    toRaw(map.value).setView([56.0, 10.0], 7);
+    map.value.setView([56.0, 10.0], 7)
   }
 }
 
 async function searchNearby() {
-  if (!userLocation.value) return;
-  console.log('Fetching nearby prices with radius', radius.value);
+  if (!userLocation.value) return
   try {
     const prices = await api.getNearbyPrices(
       userLocation.value.lat,
       userLocation.value.lng,
       radius.value
-    );
-    console.log('Received prices:', prices);
-    store.setNearbyPrices(prices);
+    )
+    store.setNearbyPrices(prices)
   } catch (error) {
-    console.error('Failed to fetch nearby prices', error);
+    console.error('Failed to fetch nearby prices', error)
   }
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString();
 }
 
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
   const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
     Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+    Math.sin(dLon/2) * Math.sin(dLon/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  return R * c
 }
 
-// ---- Watchers ----
+// Watchers
 watch(radius, () => {
-  searchNearby();
-});
+  searchNearby()
+})
 
 watch(stationsWithPrices, () => {
-  updateStationCounts();
-}, { deep: true });
+  updateStationCounts()
+}, { deep: true })
 
-// Update circle whenever userLocation or radius changes
 watch([userLocation, radius], () => {
-  updateRadiusCircle();
-}, { immediate: true });
+  updateRadiusCircle()
+}, { immediate: true })
 
-// ---- Lifecycle ----
+// Lifecycle
 onMounted(async () => {
-  // Load all stations for the map (needed to display markers even without prices)
   try {
-    const allStations = await api.getAllStations();
-    store.setStations(allStations);
-    selectedBrandsArray.value = availableBrands.value;
+    const allStations = await api.getAllStations()
+    store.setStations(allStations)
+    selectedBrandsArray.value = availableBrands.value
   } catch (error) {
-    console.error('Failed to load stations', error);
+    console.error('Failed to load stations', error)
   }
-
-  // Set up SignalR for real-time updates
   await signalR.startConnection((updatedPrice) => {
-    store.updatePrice(updatedPrice);
-  });
-});
+    store.updatePrice(updatedPrice)
+  })
+})
 </script>
 
 <style scoped>
