@@ -46,10 +46,10 @@ const greenIcon = L.icon({
 });
 
 const grayIcon = L.icon({
-  iconUrl: '/fuel-marker-gray.svg',
-  iconSize: [30, 40],
-  iconAnchor: [15, 40],
-  popupAnchor: [0, -35]
+  iconUrl: '/TankWatch/fuel-marker-gray.svg',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34]
 });
 
 const greenIconSelected = L.icon({
