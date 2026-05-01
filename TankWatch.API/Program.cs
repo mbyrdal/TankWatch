@@ -80,12 +80,17 @@ builder.Services.AddHostedService<GeocodingBackgroundService>();
 // Add CORS policy
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()
+        // Allow your GitHub Pages URL and local development
+        policy.WithOrigins(
+                "https://mbyrdal.github.io", // GitHub pages
+                "http://localhost:5173", // local Vue dev server
+                "http://localhost:5174"
+            )
             .AllowAnyMethod()
             .AllowAnyHeader();
-        // .AllowCredentials() // can't use with AllowAnyOrigin
+        // .AllowCredentials() // not needed for this setup
     });
 });
 
@@ -101,9 +106,10 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseRouting();
-app.UseCors("AllowVueFrontend");
+app.UseCors("AllowFrontend");
 app.UseAuthorization();
 app.MapControllers();
+
 app.MapHub<PriceHub>("/priceHub");
 
 // Health check
