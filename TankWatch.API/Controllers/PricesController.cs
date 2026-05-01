@@ -43,4 +43,22 @@ public class PricesController : ControllerBase
             return StatusCode(500, "An unexpected error occurred: "  + ex.Message);
         }
     }
+    
+    [HttpGet("history")]
+    public async Task<ActionResult<IEnumerable<PriceHistoryDto>>> GetPriceHistory(
+        int stationId, int fuelTypeId, int days = 30)
+    {
+        if (days <= 0 || days > 365) days = 30;
+        var history = await _priceService.GetPriceHistoryAsync(stationId, fuelTypeId, days);
+        return Ok(history);
+    }
+    
+    [HttpGet("brand-history")]
+    public async Task<ActionResult<IEnumerable<PriceHistoryDto>>> GetBrandPriceHistory(
+        string brand, int fuelTypeId, int days = 30)
+    {
+        if (days <= 0 || days > 365) days = 30;
+        var history = await _priceService.GetBrandPriceHistoryAsync(brand, fuelTypeId, days);
+        return Ok(history);
+    }
 }

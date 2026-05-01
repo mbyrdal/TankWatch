@@ -47,4 +47,14 @@ public class PriceService : IPriceService
         // Notify subscribers via SignalR
         await _notificationService.NotifyPriceUpdate(stationId, savedPrice);
     }
+    
+    public async Task<IEnumerable<PriceHistoryDto>> GetPriceHistoryAsync(int stationId, int fuelTypeId, int days)
+    {
+        return await _priceRepo.GetPriceHistoryAsync(stationId, fuelTypeId, days);
+    }
+    
+    public async Task<IEnumerable<PriceHistoryDto>> GetBrandPriceHistoryAsync(string brand, int fuelTypeId, int days)
+    {
+        return await _priceRepo.GetBrandPriceHistoryAsync(brand, fuelTypeId, days);
+    }
 }

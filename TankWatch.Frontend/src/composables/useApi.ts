@@ -13,7 +13,6 @@ export function useApi() {
     const response = await apiClient.get('/gasstations');
     return response.data;
   };
-
   const getNearbyPrices = async (lat: number, lon: number, radiusKm: number, fuelTypeId?: number): Promise<Price[]> => {
     const params: any = {
       Latitude: lat,
@@ -24,10 +23,26 @@ export function useApi() {
     const response = await apiClient.get('/prices/nearby', { params });
     return response.data;
   };
-
   const reportPrice = async (stationId: number, fuelTypeId: number, amount: number) => {
     await apiClient.post('/prices/report', { stationId, fuelTypeId, amount });
   };
+  const getFuelTypes = async (): Promise<FuelType[]> => {
+    const response = await apiClient.get('/fueltypes');
+    return response.data;
+  };
+  const getPriceHistory = async (stationId: number, fuelTypeId: number, days: number): Promise<{ date: string; price: number }[]> => {
+    const response = await apiClient.get('/prices/history', {
+      params: { stationId, fuelTypeId, days }
+    });
+    return response.data;
+  };
 
-  return { getAllStations, getNearbyPrices, reportPrice };
+  const getBrandPriceHistory = async (brand: string, fuelTypeId: number, days: number) => {
+    const response = await apiClient.get('/prices/brand-history', {
+      params: { brand, fuelTypeId, days }
+    });
+    return response.data;
+  };
+
+  return { getAllStations, getNearbyPrices, reportPrice, getFuelTypes, getPriceHistory, getBrandPriceHistory };
 }

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using Microsoft.EntityFrameworkCore;
+using TankWatch.Core.DTOs;
 using TankWatch.Core.Entities;
 using TankWatch.Core.Interfaces;
 using TankWatch.Infrastructure.Data;
@@ -75,5 +76,75 @@ public class PriceRepository : IPriceRepository
         _context.Prices.Add(price);
         await _context.SaveChangesAsync();
         return price;
+    }
+
+    public async Task UpdatePriceHistoryAsync(int gasStationId, int fuelTypeId, decimal amount, string source)
+    {
+        const string sql = @"
+        MERGE INTO ""PriceHistory"" AS target
+        USING (SELECT {0} AS ""GasStationId"", {1} AS ""FuelTypeId"", {2} AS ""Amount"", {3} AS ""Source"") AS source
+        ON target.""GasStationId"" = source.""GasStationId""
+           AND target.""FuelTypeId"" = source.""FuelTypeId""
+           AND target.""ValidTo"" IS NULL
+        WHEN MATCHED AND target.""Amount"" IS DISTINCT FROM source.""Amount"" THEN
+            UPDATE SET ""ValidTo"" = NOW()
+        WHEN NOT MATCHED THEN
+            INSERT (""GasStationId"", ""FuelTypeId"", ""Amount"", ""Source"", ""ValidFrom"", ""ValidTo"")
+            VALUES (source.""GasStationId"", source.""FuelTypeId"", source.""Amount"", source.""Source"", NOW(), NULL);";
+
+        await _context.Database.ExecuteSqlRawAsync(sql, gasStationId, fuelTypeId, amount, source);
+    }
+    
+    public async Task<IEnumerable<PriceHistoryDto>> GetPriceHistoryAsync(int stationId, int fuelTypeId, int days)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+    
+        var history = await _context.PriceHistory
+            .Where(ph => ph.GasStationId == stationId
+                         && ph.FuelTypeId == fuelTypeId
+                         && ph.ValidFrom >= cutoff)
+            .Select(ph => new { ph.ValidFrom, ph.Amount })
+            .ToListAsync();
+
+        var daily = history
+            .GroupBy(x => x.ValidFrom.Date)
+            .Select(g => new PriceHistoryDto
+            {
+                Date = g.Key,
+                Price = g.OrderByDescending(x => x.ValidFrom).First().Amount
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        return daily;
+    }
+    
+    public async Task<IEnumerable<PriceHistoryDto>> GetBrandPriceHistoryAsync(string brand, int fuelTypeId, int days)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+        brand = brand.Equals("F24", StringComparison.OrdinalIgnoreCase) ? "F24" : "Q8";
+
+        var history = await _context.PriceHistory
+            .Join(_context.GasStations,
+                ph => ph.GasStationId,
+                gs => gs.Id,
+                (ph, gs) => new { ph, gs })
+            .Where(x => x.gs.Brand == brand
+                        && x.ph.FuelTypeId == fuelTypeId
+                        && x.ph.ValidFrom >= cutoff)
+            .Select(x => new { x.ph.ValidFrom, x.ph.Amount })
+            .ToListAsync();
+
+        var daily = history
+            .GroupBy(x => x.ValidFrom.Date)
+            .Select(g => new PriceHistoryDto
+            {
+                Date = g.Key,
+                Price = g.OrderByDescending(x => x.ValidFrom).First().Amount
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        return daily;
     }
 }

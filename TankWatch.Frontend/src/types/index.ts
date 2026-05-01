@@ -21,3 +21,9 @@ export interface Price {
   latitude: number;
   longitude: number;
 }
+
+export interface FuelType {
+  id: number;
+  name: string;
+  code: string;
+}

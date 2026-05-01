@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
     public DbSet<FuelType> FuelTypes { get; set; }
     public DbSet<GasStation> GasStations { get; set; }
     public DbSet<Price> Prices { get; set; }
+    public DbSet<PriceHistory> PriceHistory { get; set; }
     
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -56,8 +57,7 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.GasStationId, e.FuelTypeId, e.ValidFrom });
-            entity.HasIndex(e => e.ValidTo); // for finding current active prices
-
+            entity.HasIndex(e => e.ValidTo);
             entity.Property(e => e.Amount).HasPrecision(5, 2);
             entity.Property(e => e.ValidFrom).IsRequired();
             entity.Property(e => e.ValidTo).IsRequired(false);
