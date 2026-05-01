@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using TankWatch.Core.Interfaces;
 using TankWatch.Infrastructure.Data;
 using TankWatch.Infrastructure.Geocoding;
-using TankWatch.Infrastructure.Hubs;
 using TankWatch.Infrastructure.Repositories;
 using TankWatch.Infrastructure.Services;
 
@@ -28,10 +27,6 @@ builder.Services.AddScoped<IGasStationRepository, GasStationRepository>();
 // Services
 builder.Services.AddScoped<IPriceService, PriceService>();
 builder.Services.AddScoped<IGasStationService, GasStationService>();
-builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
-
-// SignalR
-builder.Services.AddSignalR();
 
 // Nominatim geocoder
 builder.Services.AddHttpClient<NominatimGeocoder>(client =>
@@ -77,15 +72,17 @@ builder.Services.AddHostedService<GeocodingBackgroundService>();
 
 // Optional: Add Hangfire, Redis, etc.
 
-// Add CORS policy
+// Add CORS policy (AFTER builder.Services.AddControllers() etc.)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("https://mbyrdal.github.io", "http://localhost:5173")
+        policy.WithOrigins(
+                "https://mbyrdal.github.io", // GH pages
+                "http://localhost:5173" // local Vue dev server
+            )
             .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials();
+            .AllowAnyHeader();
     });
 });
 
@@ -104,8 +101,6 @@ app.UseRouting();
 app.UseCors("AllowFrontend");
 app.UseAuthorization();
 app.MapControllers();
-
-app.MapHub<PriceHub>("/priceHub");
 
 // Health check
 app.MapGet("/health", () => "OK");

@@ -7,12 +7,10 @@ namespace TankWatch.Infrastructure.Services;
 public class PriceService : IPriceService
 {
     private readonly IPriceRepository _priceRepo;
-    private readonly INotificationService _notificationService;
 
-    public PriceService(IPriceRepository priceRepo, INotificationService notificationService)
+    public PriceService(IPriceRepository priceRepo)
     {
         _priceRepo = priceRepo;
-        _notificationService = notificationService;
     }
     
     public async Task<IEnumerable<PriceDto>> GetNearbyPricesAsync(NearbyQuery query)
@@ -43,9 +41,6 @@ public class PriceService : IPriceService
         };
 
         var savedPrice = await _priceRepo.AddPriceAsync(price);
-
-        // Notify subscribers via SignalR
-        await _notificationService.NotifyPriceUpdate(stationId, savedPrice);
     }
     
     public async Task<IEnumerable<PriceHistoryDto>> GetPriceHistoryAsync(int stationId, int fuelTypeId, int days)

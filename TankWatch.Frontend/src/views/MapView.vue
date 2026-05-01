@@ -66,13 +66,11 @@ import { ref, computed, onMounted, watch, shallowRef } from 'vue'
 import StationMap from '@/components/StationMap.vue'
 import LocationPicker from '@/components/LocationPicker.vue'
 import { useApi } from '@/composables/useApi'
-import { useSignalR } from '@/composables/useSignalR'
 import { useStationStore } from '@/stores/stationStore'
 import { storeToRefs } from 'pinia'
 import type { Station, Price, FuelType } from '@/types'
 
 const api = useApi()
-const signalR = useSignalR()
 const store = useStationStore()
 const { stations, nearbyPrices } = storeToRefs(store)
 
@@ -292,9 +290,6 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to load stations', error)
   }
-  await signalR.startConnection((updatedPrice) => {
-    store.updatePrice(updatedPrice)
-  })
 })
 </script>
 
