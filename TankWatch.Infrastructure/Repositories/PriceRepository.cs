@@ -18,14 +18,32 @@ public class PriceRepository : IPriceRepository
 
     public async Task<IEnumerable<Price>> GetLatestPricesForStationAsync(int stationId)
     {
-        // For each fuel type, get the latest price
-        var latestPrices = await _context.Prices
-            .Where(p => p.GasStationId == stationId)
+        var sql = @"
+        SELECT DISTINCT ON (p.""FuelTypeId"") p.*
+        FROM ""Prices"" p
+        WHERE p.""GasStationId"" = {0}
+        ORDER BY p.""FuelTypeId"", p.""UpdatedAt"" DESC";
+        
+        var prices = await _context.Prices
+            .FromSqlRaw(sql, stationId)
             .Include(p => p.FuelType)
-            .GroupBy(p => p.FuelTypeId)
-            .Select(g => g.OrderByDescending(p => p.UpdatedAt).First())
             .ToListAsync();
-        return latestPrices;
+        return prices;
+    }
+
+    public async Task<IEnumerable<Price>> GetLatestPricesForStationOptimizedAsync(int stationId)
+    {
+        var sql = @"
+        SELECT DISTINCT ON (p.""FuelTypeId"") p.*
+        FROM ""Prices"" p
+        WHERE p.""GasStationId"" = {0}
+        ORDER BY p.""FuelTypeId"", p.""UpdatedAt"" DESC
+    ";
+        var prices = await _context.Prices
+            .FromSqlRaw(sql, stationId)
+            .Include(p => p.FuelType)
+            .ToListAsync();
+        return prices;
     }
 
     /// <summary>

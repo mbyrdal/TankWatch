@@ -153,7 +153,7 @@ public class PriceScraperService : BackgroundService
             {
                 if (fuelTypeMapping.TryGetValue(fp.DisplayName, out int fuelTypeId))
                 {
-                    await AddPriceIfChanged(priceRepo, existingStation.Id, fuelTypeId, fp.Price, "CircleK");
+                    await UpdatePriceHistoryIfChanged(priceRepo, existingStation.Id, fuelTypeId, fp.Price, "CircleK");
                 }
                 else 
                 {
@@ -251,7 +251,7 @@ public class PriceScraperService : BackgroundService
             {
                 if (fuelTypeMapping.TryGetValue(product.ProductName, out int fuelTypeId))
                 {
-                    await AddPriceIfChanged(priceRepo, existingStation.Id, fuelTypeId, product.Price, brand);
+                    await UpdatePriceHistoryIfChanged(priceRepo, existingStation.Id, fuelTypeId, product.Price, brand);
                 }
                 else
                 {
@@ -263,21 +263,10 @@ public class PriceScraperService : BackgroundService
         _logger.LogInformation("Q8/F24 price fetch completed.");
     }
     
-    private async Task AddPriceIfChanged(IPriceRepository priceRepo, int stationId, int fuelTypeId, decimal newPrice, string source)
+    private async Task UpdatePriceHistoryIfChanged(IPriceRepository priceRepo, int stationId, int fuelTypeId, decimal newPrice, string source)
     {
-        var latestPrices = await priceRepo.GetLatestPricesForStationAsync(stationId);
-        var latest = latestPrices.FirstOrDefault(p => p.FuelTypeId == fuelTypeId);
-
-        if (latest == null || latest.Amount != newPrice)
-        {
-            await priceRepo.AddPriceAsync(new Price
-            {
-                GasStationId = stationId,
-                FuelTypeId = fuelTypeId,
-                Amount = newPrice,
-                UpdatedAt = DateTime.UtcNow,
-                Source = source
-            });
-        }
+        // The MERGE command handles the "if changed" logic internally, no separate query needed.
+        _logger.LogDebug("Updating price for station {StationId}, fuel {FuelTypeId} to {Price}", stationId, fuelTypeId, newPrice);
+        await priceRepo.UpdatePriceHistoryAsync(stationId, fuelTypeId, newPrice, source);
     }
 }

@@ -67,6 +67,7 @@ builder.Services.AddHttpClient<CircleKFuelPriceProvider>(client =>
 builder.Services.AddHttpClient<Q8FuelPriceProvider>(client =>
 {
     client.BaseAddress = new Uri("https://beta.q8.dk/");
+    client.Timeout = TimeSpan.FromSeconds(30); // reasonable timeout
     // No special headers required for this endpoint
 });
 
