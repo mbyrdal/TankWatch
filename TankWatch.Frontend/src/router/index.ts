@@ -1,8 +1,8 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHashHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(),   // use hash mode for GitHub Pages
   routes: [
     {
       path: '/',
@@ -12,9 +12,8 @@ const router = createRouter({
     {
       path: '/map',
       name: 'map',
-      component: () => import('../views/MapView.vue'), // lazy-loaded
+      component: () => import('../views/MapView.vue'),
     },
-    // optional about page
     {
       path: '/about',
       name: 'about',
