@@ -39,21 +39,21 @@ let markerCluster: L.MarkerClusterGroup | null = null;
 
 // Define custom icons
 const greenIcon = L.icon({
-  iconUrl: 'TankWatch/fuel-marker-green.svg',
+  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-green.svg`,
   iconSize: [30, 40],
   iconAnchor: [15, 40],
   popupAnchor: [0, -35]
 });
 
 const grayIcon = L.icon({
-  iconUrl: 'TankWatch/fuel-marker-gray.svg',
+  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-gray.svg`,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34]
 });
 
 const greenIconSelected = L.icon({
-  iconUrl: 'TankWatch/fuel-marker-green-selected.svg',
+  iconUrl: `${import.meta.env.BASE_URL}fuel-marker-green-selected.svg`,
   iconSize: [30, 40],
   iconAnchor: [15, 40],
   popupAnchor: [0, -35]
