@@ -58,6 +58,8 @@
 </template>
 
 <script setup lang="ts">
+import * as L from 'leaflet';
+import 'leaflet.markercluster';
 import { toRaw, shallowRef } from 'vue';
 import { ref, computed, onMounted, watch } from 'vue';
 import StationMap from '@/components/StationMap.vue';
@@ -66,7 +68,7 @@ import { useApi } from '@/composables/useApi';
 import { useSignalR } from '@/composables/useSignalR';
 import { useStationStore } from '@/stores/stationStore';
 import { storeToRefs } from 'pinia';
-import type { Station, Price } from '@/types';
+import type { Station, Price, FuelType } from '@/types';
 
 const api = useApi();
 const signalR = useSignalR();
@@ -140,7 +142,7 @@ const stationsWithPrices = computed(() => {
 
   // Deduplicate by ID and attach prices
   const uniqueStations = new Map<number, any>();
-  stationsToShow.forEach(s => {
+  stationsToShow.forEach((s: Station) => {
     uniqueStations.set(s.id, {
       ...s,
       prices: priceMap.get(s.id) || [],
@@ -217,7 +219,7 @@ function updateStationCounts() {
   const stationsToCount = stationsWithPrices.value; // all stations that passed radius filter
   const counts: Record<string, number> = {};
   let noPriceCount = 0;
-  stationsToCount.forEach(station => {
+  stationsToCount.forEach((station: any) => {
     if (station.hasPrices) {
       station.prices.forEach((price: Price) => {
         counts[price.fuelType] = (counts[price.fuelType] || 0) + 1;
